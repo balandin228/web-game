@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using FluentAssertions;
 using Game.Domain;
-using MongoDB.Driver.Core.WireProtocol.Messages;
 using NUnit.Framework;
 
 namespace Tests

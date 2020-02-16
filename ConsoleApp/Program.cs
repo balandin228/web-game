@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using MongoDB.Driver;
 using Game.Domain;
 
 namespace ConsoleApp
@@ -8,12 +9,18 @@ namespace ConsoleApp
     {
         private readonly IUserRepository userRepo;
         private readonly IGameRepository gameRepo;
+        private readonly ITurnsRepository turnsRepo;
         private readonly Random random = new Random();
 
         private Program(string[] args)
         {
-            userRepo = new InMemoryUserRepository();
-            gameRepo = new InMemoryGameRepository();
+            var mongoConnectionString =
+                Environment.GetEnvironmentVariable("WEBGAME_MONGO_CONNECTION_STRING")
+                ?? "mongodb://localhost:27017";
+            var db = new MongoClient(mongoConnectionString).GetDatabase("web-game");
+            userRepo = new MongoUserRepository(db);
+            gameRepo = new MongoGameRepository(db);
+            turnsRepo = new MongoTurnsRepository(db);
         }
 
         public static void Main(string[] args)
@@ -125,8 +132,9 @@ namespace ConsoleApp
 
             if (game.HaveDecisionOfEveryPlayer)
             {
-                // TODO: Сохранить информацию о прошедшем туре в ITurnsRepository. Сформировать информацию о закончившемся туре внутри FinishTurn и вернуть её сюда.
-                game.FinishTurn();
+                var gameTurn = game.FinishTurn();
+                // Save Turn Information to database:
+                turnsRepo.Insert(gameTurn);
             }
 
             ShowScore(game);
@@ -180,7 +188,15 @@ namespace ConsoleApp
         private void ShowScore(GameEntity game)
         {
             var players = game.Players;
-            // TODO: Показать информацию про 5 последних туров: кто как ходил и кто в итоге выиграл. Прочитать эту информацию из ITurnsRepository
+            // Show 5 last turns: decisions of both players and the winner
+            var turns = turnsRepo.GetLastTurns(game.Id, 5);
+            Console.WriteLine();
+            Console.WriteLine("Last turns:");
+            foreach (var turn in turns)
+            {
+                var line = $"{players[0].Name}: {turn.PlayerDecisions[players[0].UserId],-8} vs {turn.PlayerDecisions[players[1].UserId],8} {players[1].Name} --> {players.FirstOrDefault(p => p.UserId == turn.WinnerId)?.Name ?? "nobody"} wins";
+                Console.WriteLine($"{turn.TurnIndex,-2} {line}");
+            }
             Console.WriteLine($"Score: {players[0].Name} {players[0].Score} : {players[1].Score} {players[1].Name}");
         }
     }
